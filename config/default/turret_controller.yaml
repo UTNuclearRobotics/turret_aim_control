@@ -1,0 +1,21 @@
+# Turret controller node
+turret_controller:
+  ros__parameters:
+    # PID
+    kp: 10.0
+    ki: 15.0
+    kd: -1.0
+    buffer_n: 10
+    timer_hz: 10
+
+    # Names
+    turret_name: "pxxls"
+    payload_name: "payload"
+
+    # Links
+    base_link: "world" # Static frame
+    turret_pan_link: "pxxls/pan_link"
+    turret_tilt_link: "pxxls/tilt_link"
+    payload_aim_link: "payload/aim_link"
+    payload_aim_joint: "payload/aim_joint"
+    target_link: "world" # Target you want to aim at

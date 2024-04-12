@@ -1,0 +1,8 @@
+# Operating modes: https://docs.trossenrobotics.com/interbotix_xsarms_docs/ros_interface/ros1/overview/xs_msgs.html
+groups:
+  pxxls:
+    operating_mode: velocity
+    profile_type: velocity
+    profile_velocity: 1000
+    profile_acceleration: 500               
+    torque_enable: true

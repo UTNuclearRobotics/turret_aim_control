@@ -1,0 +1,15 @@
+turret:
+  simulate: 'true'
+  model: 'pxxls'
+  name: 'pxxls'
+  controller_name: 'turret_controller'
+
+turret_position:
+  x: -0.5
+  y: -0.5
+  z: 0.25
+  parent_frame: "world"
+  child_frame: "pxxls/base_link"
+
+payload:
+  name: 'payload'
