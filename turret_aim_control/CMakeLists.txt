@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(interbotix_turret_aim_control)
+project(turret_aim_control)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -14,6 +14,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(turret_aim_control_interfaces REQUIRED)
 
 include_directories(include)
 
@@ -26,6 +27,7 @@ ament_target_dependencies(turret_controller
   tf2
   tf2_geometry_msgs
   tf2_ros
+  turret_aim_control_interfaces
 )
 target_link_libraries(turret_controller "${cpp_typesupport_target}")
 

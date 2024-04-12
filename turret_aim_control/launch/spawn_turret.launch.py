@@ -43,7 +43,7 @@ def launch_setup(context, *args, **kwargs):
     assembly_launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'launch',
                 'descriptions',
                 'assembly_description.launch.py'
@@ -85,7 +85,7 @@ def launch_setup(context, *args, **kwargs):
     )
 
     turret_controller_node = Node(
-        package='interbotix_turret_aim_control',
+        package='turret_aim_control',
         executable='turret_controller',
         name=config['turret']['controller_name'],
         parameters=[
@@ -133,7 +133,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'robot_configs',
             default_value=PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'config',
                 'default',
                 'turret.yaml',
@@ -145,7 +145,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'turret_controller_configs',
             default_value=PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'config',
                 'default',
                 'turret_controller.yaml',
@@ -165,7 +165,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'rviz_config',
             default_value=PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'rviz',
                 'spawn_turret.rviz',
             ]),
@@ -207,7 +207,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'motor_configs',
             default_value=PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'config',
                 'default',
                 'interbotix',
@@ -220,7 +220,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'mode_configs',
             default_value=PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'config',
                 'default',
                 'interbotix',

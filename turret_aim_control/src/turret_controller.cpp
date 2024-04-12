@@ -4,7 +4,8 @@ TurretController::TurretController() : Node("turret_controller")
 {
     robot_init_parameters();
     robot_init_publishers();
-    robot_init_timers();
+    // robot_init_timers();
+    robot_init_services();
 
     // if (!turret_simulate_joint_states)
     // {
@@ -87,6 +88,12 @@ void TurretController::robot_init_timers()
     joint_goal_timer = this->create_wall_timer(
         std::chrono::milliseconds(static_cast<int>((1.0 / timer_hz) * 1000)),
         std::bind(&TurretController::setTurretJointGoal, this));
+    joint_goal_timer->cancel(); // Instantly stop timer
+}
+
+void TurretController::robot_init_services()
+{
+    service = this->create_service<turret_aim_control_interfaces::srv::ControlTurret>("control_turret_srv", &TurretController::controlTurretService);
 }
 
 void TurretController::set_custom_dynamixel_motor_pid_gains()
@@ -119,6 +126,41 @@ void TurretController::set_custom_dynamixel_motor_pid_gains()
 
     // Send the request
     client->async_send_request(request);
+}
+
+void TurretController::controlTurretService(const std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Response> response)
+{
+    if (request->control_turret)
+    {
+        // Start aim controller
+        try
+        {
+            target_link = request->frame_id;
+            joint_goal_timer->reset();
+            response->success = true;
+            response->message = "Successfully started turret aim controller!";
+        }
+        catch (const std::exception &e)
+        {
+            response->success = false;
+            response->message = "Failed to start turret aim controller:" + std::string(e.what());
+        }
+    }
+    else
+    {
+        // Stop aim controller
+        try
+        {
+            joint_goal_timer->cancel();
+            response->success = true;
+            response->message = "Successfully stopped turret aim controller!";
+        }
+        catch (const std::exception &e)
+        {
+            response->success = false;
+            response->message = "Failed to stop turret aim controller:" + std::string(e.what());
+        }
+    }
 }
 
 void TurretController::setTurretJointGoal()
@@ -238,7 +280,6 @@ Eigen::Vector3f TurretController::calculateErrorIntegral(Eigen::Matrix3Xf &buffe
     // Calculate time step between consecutive buffer elements
     float dt = 1.0 / hz;
 
-    // Eigen::Vector3f error_integral = buffer.rowwise().sum() * dt;
     Eigen::Vector3f error_integral = buffer.rowwise().sum() * dt / buffer.cols();
 
     return error_integral;

@@ -13,7 +13,7 @@ turret_controller:
     payload_name: "payload"
 
     # Links
-    base_link: "world" # Static frame
+    base_link: "world" # Static reference frame
     turret_pan_link: "pxxls/pan_link"
     turret_tilt_link: "pxxls/tilt_link"
     payload_aim_link: "payload/aim_link"

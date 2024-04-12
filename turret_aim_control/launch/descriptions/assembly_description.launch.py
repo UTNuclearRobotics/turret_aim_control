@@ -60,7 +60,7 @@ def launch_setup(context, *args, **kwargs):
     payload_description_launch_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'launch',
                 'descriptions',
                 'payload_description.launch.py',
@@ -155,7 +155,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'rviz_config',
             default_value=PathJoinSubstitution([
-                FindPackageShare('interbotix_turret_aim_control'),
+                FindPackageShare('turret_aim_control'),
                 'test',
                 'rviz',
                 'assembly.rviz',

@@ -19,6 +19,8 @@
 #include "interbotix_xs_msgs/msg/joint_group_command.hpp"
 #include "interbotix_xs_msgs/srv/motor_gains.hpp"
 
+#include "turret_aim_control_interfaces/srv/control_turret.hpp"
+
 class TurretController : public rclcpp::Node
 {
 public:
@@ -81,6 +83,7 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr turret_joint_states_publisher;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr payload_joint_states_publisher;
     rclcpp::TimerBase::SharedPtr joint_goal_timer;
+    rclcpp::Service<turret_aim_control_interfaces::srv::ControlTurret>::SharedPtr service;
 
     /// @brief Declare all parameters needed by the node
     void robot_init_parameters();
@@ -91,9 +94,13 @@ private:
     /// @brief Initialize ROS Timers
     void robot_init_timers();
 
+    void robot_init_services();
+
     /// @brief Set custom PID values for the Dynamixel motors
     /// Default PID values: https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#control-table-of-ram-area
     void set_custom_dynamixel_motor_pid_gains();
+
+    void controlTurretService(const std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Response> response);
 
     // Joint publishers
     void publishTurretJointGoal();
@@ -102,9 +109,9 @@ private:
 
     // End-effector PID methods
     Eigen::Vector3f getPIDVelocity();
-    void updateBuffer(Eigen::Matrix3Xf& buffer, Eigen::Vector3f error);
-    Eigen::Vector3f calculateErrorDt(Eigen::Matrix3Xf& buffer, int hz);
-    Eigen::Vector3f calculateErrorIntegral(Eigen::Matrix3Xf& buffer, int hz);
+    void updateBuffer(Eigen::Matrix3Xf &buffer, Eigen::Vector3f error);
+    Eigen::Vector3f calculateErrorDt(Eigen::Matrix3Xf &buffer, int hz);
+    Eigen::Vector3f calculateErrorIntegral(Eigen::Matrix3Xf &buffer, int hz);
 
     /// @brief Helper function to print vector values
     void printVector(std::string var, Eigen::Vector3f vector);

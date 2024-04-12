@@ -24,7 +24,7 @@ def launch_setup(context, *args, **kwargs):
 
     # Load URDF
     urdf = os.path.join(
-        get_package_share_directory("interbotix_turret_aim_control"),
+        get_package_share_directory("turret_aim_control"),
         "urdf",
         "payload.urdf.xacro"
     )
