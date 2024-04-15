@@ -31,8 +31,18 @@ ament_target_dependencies(turret_controller
 )
 target_link_libraries(turret_controller "${cpp_typesupport_target}")
 
+add_executable(target src/target.cpp)
+ament_target_dependencies(target
+  geometry_msgs
+  rclcpp
+  tf2
+  tf2_ros
+)
+target_link_libraries(target "${cpp_typesupport_target}")
+
 install(TARGETS
   turret_controller
+  target
   DESTINATION lib/${PROJECT_NAME}
 )
 
