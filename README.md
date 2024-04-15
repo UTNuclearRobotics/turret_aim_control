@@ -60,8 +60,7 @@ ros2 service call /aim_enable turret_aim_control_interfaces/srv/AimEnable {"aim_
 ```
 
 You should now see the turret aiming at the target.
-<!-- ![Demo](images/demo.png) -->
-<img src="images/demo.png" alt="drawing" width="400"/>
+<img src="images/demo.gif" alt="drawing" width="400"/>
 
 You can call this to stop it.
 ```
