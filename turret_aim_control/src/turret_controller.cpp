@@ -4,7 +4,7 @@ TurretController::TurretController() : Node("turret_controller")
 {
     robot_init_parameters();
     robot_init_publishers();
-    // robot_init_timers();
+    robot_init_timers();
     robot_init_services();
 
     // if (!turret_simulate_joint_states)
@@ -93,7 +93,8 @@ void TurretController::robot_init_timers()
 
 void TurretController::robot_init_services()
 {
-    service = this->create_service<turret_aim_control_interfaces::srv::ControlTurret>("control_turret_srv", &TurretController::controlTurretService);
+    using namespace std::placeholders;
+    srv_aim_enable = this->create_service<AimEnable>("aim_enable", std::bind(&TurretController::robot_srv_aim_enable, this, _1, _2));
 }
 
 void TurretController::set_custom_dynamixel_motor_pid_gains()
@@ -128,14 +129,16 @@ void TurretController::set_custom_dynamixel_motor_pid_gains()
     client->async_send_request(request);
 }
 
-void TurretController::controlTurretService(const std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Response> response)
+void TurretController::robot_srv_aim_enable(
+    const std::shared_ptr<AimEnable::Request> request,
+    const std::shared_ptr<AimEnable::Response> response)
 {
-    if (request->control_turret)
+    if (request->aim_enable)
     {
         // Start aim controller
         try
         {
-            target_link = request->frame_id;
+            target_link = request->target_frame_id;
             joint_goal_timer->reset();
             response->success = true;
             response->message = "Successfully started turret aim controller!";

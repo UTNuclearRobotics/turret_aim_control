@@ -5,9 +5,9 @@ turret:
   controller_name: 'turret_controller'
 
 turret_position:
-  x: -0.5
-  y: -0.5
-  z: 0.25
+  x: -1.0
+  y: 0.0
+  z: 0.0
   parent_frame: "world"
   child_frame: "pxxls/base_link"
 

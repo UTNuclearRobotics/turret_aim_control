@@ -1,4 +1,3 @@
-import os
 import yaml
 from interbotix_xs_modules.xs_launch import (
     declare_interbotix_xsturret_robot_description_launch_arguments,
@@ -90,9 +89,6 @@ def launch_setup(context, *args, **kwargs):
         name=config['turret']['controller_name'],
         parameters=[
             turret_controller_configs_launch_arg,
-            # {
-            #     'turret_simulate_joint_states': true
-            # }
             {
                 'turret_simulate_joint_states':
                 PythonExpression(

@@ -19,7 +19,10 @@
 #include "interbotix_xs_msgs/msg/joint_group_command.hpp"
 #include "interbotix_xs_msgs/srv/motor_gains.hpp"
 
-#include "turret_aim_control_interfaces/srv/control_turret.hpp"
+#include "turret_aim_control_interfaces/srv/aim_enable.hpp"
+
+// Simplify message and service usage
+using AimEnable = turret_aim_control_interfaces::srv::AimEnable;
 
 class TurretController : public rclcpp::Node
 {
@@ -83,7 +86,7 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr turret_joint_states_publisher;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr payload_joint_states_publisher;
     rclcpp::TimerBase::SharedPtr joint_goal_timer;
-    rclcpp::Service<turret_aim_control_interfaces::srv::ControlTurret>::SharedPtr service;
+    rclcpp::Service<AimEnable>::SharedPtr srv_aim_enable;
 
     /// @brief Declare all parameters needed by the node
     void robot_init_parameters();
@@ -100,7 +103,9 @@ private:
     /// Default PID values: https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#control-table-of-ram-area
     void set_custom_dynamixel_motor_pid_gains();
 
-    void controlTurretService(const std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::ControlTurret::Response> response);
+    void robot_srv_aim_enable(
+        const std::shared_ptr<AimEnable::Request> request,
+        const std::shared_ptr<AimEnable::Response> response);
 
     // Joint publishers
     void publishTurretJointGoal();
