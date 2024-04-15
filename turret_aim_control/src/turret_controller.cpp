@@ -7,17 +7,17 @@ TurretController::TurretController() : Node("turret_controller")
     robot_init_timers();
     robot_init_services();
 
-    // if (!turret_simulate_joint_states)
-    // {
-    //     set_custom_dynamixel_motor_pid_gains();
-    // }
+    if (!pub_turret_joint_states)
+    {
+        set_custom_dynamixel_motor_pid_gains();
+    }
 }
 
 void TurretController::robot_init_parameters()
 {
     timer_hz = this->declare_parameter<int32_t>("timer_hz", 10);
 
-    turret_simulate_joint_states = this->declare_parameter<bool>("turret_simulate_joint_states", true);
+    pub_turret_joint_states = this->declare_parameter<bool>("pub_turret_joint_states", true);
 
     // Turret velocity PID gain constants, currently set to Dynamixel default values
     kp_pos = this->declare_parameter<int32_t>("kp_pos", 800);
@@ -51,8 +51,8 @@ void TurretController::robot_init_parameters()
     target_link = this->declare_parameter<std::string>("target_link", "");
 
     // Topics
-    turret_joint_states_topic = this->declare_parameter<std::string>("turret_joint_states_topic", turret_name + "/joint_states");
-    payload_joint_states_topic = this->declare_parameter<std::string>("payload_joint_states_topic", payload_name + "/joint_states");
+    topic_joint_states_turret = this->declare_parameter<std::string>("topic_joint_states_turret", turret_name + "/joint_states");
+    topic_joint_states_payload = this->declare_parameter<std::string>("topic_joint_states_payload", payload_name + "/joint_states");
 
     // Transform topic listener
     tf_buffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -66,29 +66,36 @@ void TurretController::robot_init_parameters()
 
 void TurretController::robot_init_publishers()
 {
-    if (turret_simulate_joint_states)
+    // If disconnected from turret hardware, simulating updates turret joint states
+    if (pub_turret_joint_states)
     {
-        turret_joint_states_publisher = this->create_publisher<sensor_msgs::msg::JointState>(
-            turret_joint_states_topic,
+        pub_joint_states_turret = this->create_publisher<JointState>(
+            topic_joint_states_turret,
             rclcpp::QoS(1));
     }
 
-    payload_joint_states_publisher = this->create_publisher<sensor_msgs::msg::JointState>(
-        payload_joint_states_topic,
+    // Update virtual end-effector joint states
+    pub_joint_states_payload = this->create_publisher<JointState>(
+        topic_joint_states_payload,
         rclcpp::QoS(1));
 
     // Read by Interbotix SDK to control hardware
-    joint_group_command_publisher = this->create_publisher<interbotix_xs_msgs::msg::JointGroupCommand>(
+    pub_joint_group_command = this->create_publisher<JointGroupCommand>(
         turret_name + "/commands/joint_group",
         10);
 }
 
 void TurretController::robot_init_timers()
 {
-    joint_goal_timer = this->create_wall_timer(
-        std::chrono::milliseconds(static_cast<int>((1.0 / timer_hz) * 1000)),
-        std::bind(&TurretController::setTurretJointGoal, this));
-    joint_goal_timer->cancel(); // Instantly stop timer
+    // Timer that calculates the turret joint goal to aim at the target
+    tmr_joint_goal = this->create_wall_timer(
+        std::chrono::nanoseconds(static_cast<int>(1.0e9 / (timer_hz))),
+        std::bind(
+            &TurretController::update_turret_joint_goal,
+            this));
+
+    // Instantly stop timer and wait for service to enable
+    tmr_joint_goal->cancel();
 }
 
 void TurretController::robot_init_services()
@@ -139,7 +146,7 @@ void TurretController::robot_srv_aim_enable(
         try
         {
             target_link = request->target_frame_id;
-            joint_goal_timer->reset();
+            tmr_joint_goal->reset();
             response->success = true;
             response->message = "Successfully started turret aim controller!";
         }
@@ -154,7 +161,7 @@ void TurretController::robot_srv_aim_enable(
         // Stop aim controller
         try
         {
-            joint_goal_timer->cancel();
+            tmr_joint_goal->cancel();
             response->success = true;
             response->message = "Successfully stopped turret aim controller!";
         }
@@ -166,7 +173,7 @@ void TurretController::robot_srv_aim_enable(
     }
 }
 
-void TurretController::setTurretJointGoal()
+void TurretController::update_turret_joint_goal()
 {
     // Fetch transforms
     geometry_msgs::msg::TransformStamped t1;
@@ -221,7 +228,7 @@ void TurretController::setTurretJointGoal()
 
         JacobianInv = Jacobian.completeOrthogonalDecomposition().pseudoInverse();
         // dx << Eigen::Vector3f::Zero(3), kp * (td_transform - t3_transform);
-        dx << Eigen::Vector3f::Zero(3), getPIDVelocity();
+        dx << Eigen::Vector3f::Zero(3), get_pid();
         dq = JacobianInv * dx;
 
         // Check if dq(2) would make q(2) go negative, don't let it
@@ -233,32 +240,32 @@ void TurretController::setTurretJointGoal()
 
         q += dq / timer_hz;
 
-        publishTurretJointGoal();
+        publish_turret_joint_goal();
     }
     catch (const tf2::TransformException &ex)
     {
         RCLCPP_INFO(get_logger(), "Couldn't find transforms: %s", ex.what());
     }
 
-    publishSimJointStates();
+    publish_sim_joint_states();
 }
 
-Eigen::Vector3f TurretController::getPIDVelocity()
+Eigen::Vector3f TurretController::get_pid()
 {
     Eigen::Vector3f error = td_transform - t3_transform;
-    // printVector("error", error);
+    // print_vector3f("error", error);
 
-    updateBuffer(buffer, error);
+    update_buffer(buffer, error);
 
-    Eigen::Vector3f error_dt = calculateErrorDt(buffer, timer_hz);
-    // printVector("error_dt", error_dt);
+    Eigen::Vector3f error_dt = get_error_dt(buffer, timer_hz);
+    // print_vector3f("error_dt", error_dt);
 
-    Eigen::Vector3f error_integral = calculateErrorIntegral(buffer, timer_hz);
+    Eigen::Vector3f error_integral = get_error_integral(buffer, timer_hz);
 
     return (kp * error) + (kd * error_dt) - (ki * error_integral);
 }
 
-void TurretController::updateBuffer(Eigen::Matrix3Xf &buffer, Eigen::Vector3f value)
+void TurretController::update_buffer(Eigen::Matrix3Xf &buffer, Eigen::Vector3f value)
 {
     // Left shift the buffer discarding the oldest value
     buffer.leftCols(buffer.cols() - 1) = buffer.rightCols(buffer.cols() - 1);
@@ -267,7 +274,7 @@ void TurretController::updateBuffer(Eigen::Matrix3Xf &buffer, Eigen::Vector3f va
     buffer.col(buffer.cols() - 1) = value;
 }
 
-Eigen::Vector3f TurretController::calculateErrorDt(Eigen::Matrix3Xf &buffer, int hz)
+Eigen::Vector3f TurretController::get_error_dt(Eigen::Matrix3Xf &buffer, int hz)
 {
     // Calculate time step between consecutive buffer elements
     float dt = 1.0 / hz;
@@ -278,7 +285,7 @@ Eigen::Vector3f TurretController::calculateErrorDt(Eigen::Matrix3Xf &buffer, int
     return error_dt;
 }
 
-Eigen::Vector3f TurretController::calculateErrorIntegral(Eigen::Matrix3Xf &buffer, int hz)
+Eigen::Vector3f TurretController::get_error_integral(Eigen::Matrix3Xf &buffer, int hz)
 {
     // Calculate time step between consecutive buffer elements
     float dt = 1.0 / hz;
@@ -288,7 +295,7 @@ Eigen::Vector3f TurretController::calculateErrorIntegral(Eigen::Matrix3Xf &buffe
     return error_integral;
 }
 
-void TurretController::publishTurretJointGoal()
+void TurretController::publish_turret_joint_goal()
 {
     interbotix_xs_msgs::msg::JointGroupCommand joint_group_command_msg;
     joint_group_command_msg.name = turret_name;
@@ -296,15 +303,15 @@ void TurretController::publishTurretJointGoal()
         dq.coeff(0),
         dq.coeff(1),
     };
-    joint_group_command_publisher->publish(joint_group_command_msg);
+    pub_joint_group_command->publish(joint_group_command_msg);
 }
 
-void TurretController::publishSimJointStates()
+void TurretController::publish_sim_joint_states()
 {
-    sensor_msgs::msg::JointState joint_states_msg;
+    JointState joint_states_msg;
     joint_states_msg.header.stamp = this->get_clock()->now();
 
-    if (turret_simulate_joint_states)
+    if (pub_turret_joint_states)
     {
         joint_states_msg.name = {
             "pan",
@@ -314,7 +321,7 @@ void TurretController::publishSimJointStates()
             q.coeff(0),
             q.coeff(1),
         };
-        turret_joint_states_publisher->publish(joint_states_msg);
+        pub_joint_states_turret->publish(joint_states_msg);
     }
 
     // payload aim joint
@@ -324,12 +331,7 @@ void TurretController::publishSimJointStates()
     joint_states_msg.position = {
         q.coeff(2),
     };
-    payload_joint_states_publisher->publish(joint_states_msg);
-}
-
-void TurretController::printVector(std::string var, Eigen::Vector3f vector)
-{
-    RCLCPP_INFO(get_logger(), "%s: <%f, %f, %f>", var.c_str(), vector.coeff(0), vector.coeff(1), vector.coeff(2));
+    pub_joint_states_payload->publish(joint_states_msg);
 }
 
 int main(int argc, char **argv)

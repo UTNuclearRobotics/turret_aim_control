@@ -90,7 +90,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             turret_controller_configs_launch_arg,
             {
-                'turret_simulate_joint_states':
+                'pub_turret_joint_states':
                 PythonExpression(
                     "True" if config['turret']['simulate'] == 'true' else "False")
             }

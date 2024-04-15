@@ -23,6 +23,8 @@
 
 // Simplify message and service usage
 using AimEnable = turret_aim_control_interfaces::srv::AimEnable;
+using JointGroupCommand = interbotix_xs_msgs::msg::JointGroupCommand;
+using JointState = sensor_msgs::msg::JointState;
 
 class TurretController : public rclcpp::Node
 {
@@ -30,9 +32,11 @@ public:
     TurretController();
 
 private:
-    int32_t timer_hz;
+    // Frequency at which the ROS Timer updating the turret joint goal should run
+    int timer_hz;
 
-    bool turret_simulate_joint_states;
+    // Boolean that determines if turret joint states should be published
+    bool pub_turret_joint_states;
 
     // Dynamixel PID
     int32_t kp_pos;
@@ -63,13 +67,14 @@ private:
     std::string target_link;
 
     // Topics
-    std::string turret_joint_states_topic;
-    std::string payload_joint_states_topic;
+    std::string topic_joint_states_turret;
+    std::string topic_joint_states_payload;
 
     // Transform topic listener
     std::shared_ptr<tf2_ros::TransformListener> tf_listener;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer;
 
+    // Calculated pose to be published to the turret
     Eigen::Vector3f dq;
     Eigen::Vector3f q;
 
@@ -82,44 +87,54 @@ private:
     Eigen::Vector3f t3_transform;
     Eigen::Vector3f td_transform;
 
-    rclcpp::Publisher<interbotix_xs_msgs::msg::JointGroupCommand>::SharedPtr joint_group_command_publisher;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr turret_joint_states_publisher;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr payload_joint_states_publisher;
-    rclcpp::TimerBase::SharedPtr joint_goal_timer;
+    /// @brief Declare ROS parameters, publishers, timers, and services
+    rclcpp::Publisher<interbotix_xs_msgs::msg::JointGroupCommand>::SharedPtr pub_joint_group_command;
+    rclcpp::Publisher<JointState>::SharedPtr pub_joint_states_turret;
+    rclcpp::Publisher<JointState>::SharedPtr pub_joint_states_payload;
+    rclcpp::TimerBase::SharedPtr tmr_joint_goal;
     rclcpp::Service<AimEnable>::SharedPtr srv_aim_enable;
 
-    /// @brief Declare all parameters needed by the node
+    /// @brief Initialize ROS parameters, publishers, timers, and services
     void robot_init_parameters();
-
-    /// @brief Initialize ROS Publishers
     void robot_init_publishers();
-
-    /// @brief Initialize ROS Timers
     void robot_init_timers();
-
     void robot_init_services();
 
     /// @brief Set custom PID values for the Dynamixel motors
-    /// Default PID values: https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#control-table-of-ram-area
+    /// @details This service is created by Interbotix. Default PID values: https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#control-table-of-ram-area
     void set_custom_dynamixel_motor_pid_gains();
 
+    /// @brief ROS Service to turret aiming on/off
+    /// @param request AimEnable service message request
+    /// @param response AimEnable service message response
+    /// @details refer to the service definition for details
     void robot_srv_aim_enable(
         const std::shared_ptr<AimEnable::Request> request,
         const std::shared_ptr<AimEnable::Response> response);
 
-    // Joint publishers
-    void publishTurretJointGoal();
-    void publishSimJointStates();
-    void setTurretJointGoal();
+    /// @brief This is the robot_srv_aim_enable callback function
+    /// @details This is the main turret controller method to calculate turret orientation and manages publishing turret commands and joint states. Only if the target frame is in the /tf tree, the turret will move to align with the target
+    void update_turret_joint_goal();
+
+    /// @brief Publishes commands to control the turret hardware
+    /// @details Defined by Interbotix libraries
+    void publish_turret_joint_goal();
+
+    /// @brief Publishes the joint states for all simulated joints
+    /// @details Always publishes the virtual end-effector joints to align with target. Only publishes the turret joint states if pub_turret_joint_states is true;
+    void publish_sim_joint_states();
 
     // End-effector PID methods
-    Eigen::Vector3f getPIDVelocity();
-    void updateBuffer(Eigen::Matrix3Xf &buffer, Eigen::Vector3f error);
-    Eigen::Vector3f calculateErrorDt(Eigen::Matrix3Xf &buffer, int hz);
-    Eigen::Vector3f calculateErrorIntegral(Eigen::Matrix3Xf &buffer, int hz);
+    void update_buffer(Eigen::Matrix3Xf &buffer, Eigen::Vector3f error);
+    Eigen::Vector3f get_pid();
+    Eigen::Vector3f get_error_dt(Eigen::Matrix3Xf &buffer, int hz);
+    Eigen::Vector3f get_error_integral(Eigen::Matrix3Xf &buffer, int hz);
 
     /// @brief Helper function to print vector values
-    void printVector(std::string var, Eigen::Vector3f vector);
+    void print_vector3f(std::string var, Eigen::Vector3f vector)
+    {
+        RCLCPP_INFO(get_logger(), "%s: <%f, %f, %f>", var.c_str(), vector.coeff(0), vector.coeff(1), vector.coeff(2));
+    }
 };
 
 #endif
