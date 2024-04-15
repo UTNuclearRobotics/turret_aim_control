@@ -42,7 +42,7 @@ colcon build
 
 ## Running the Packages
 
-This basic demo will setup a virtual turret aiming at a circular rotating target. Make sure to create a new terminal and source the `install/setup.bash` before running any of these commands.
+This basic demo will setup a virtual turret aiming at a circular rotating target. Make sure to create a new terminal and source the workspace `install/setup.bash` before running any of these commands.
 
 Spawn the turret in RViz.
 ```
@@ -60,6 +60,7 @@ ros2 service call /aim_enable turret_aim_control_interfaces/srv/AimEnable {"aim_
 ```
 
 You should now see the turret aiming at the target.
+
 <img src="images/demo.gif" alt="drawing" width="400"/>
 
 You can call this to stop it.
