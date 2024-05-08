@@ -13,7 +13,7 @@ BASE_FRAME_ID = "/pxxls/base_link"
 TILT_TF_FRAME_ID = "pxxls/tilt_link"
 RATE = 25
 
-DEBUG = False
+DEBUG = True
 
 class TurretControllerService(object):
     def __init__(self):
@@ -74,6 +74,7 @@ class TurretControllerService(object):
         if self.aim_enable and not self.initialized:
             self.go_home()
             self.initialized = True
+            rospy.loginfo("Initialized")
         elif (
             # not rospy.is_shutdown()
             self.aim_enable
@@ -96,6 +97,7 @@ class TurretControllerService(object):
             # assumes negative angle tilts down
             tilt_error = math.atan(y_target / z_target)
             tilt_cmd = tilt_theta - tilt_error
+            rospy.loginfo("Pan Error: %f Tilt Error: %f", pan_error, tilt_error) if DEBUG else None
             rospy.loginfo("Pan: %f Tilt: %f", pan_error, tilt_cmd) if DEBUG else None
 
             # Publish to PTU
@@ -103,9 +105,14 @@ class TurretControllerService(object):
             self.joint_commands.cmd[1] = tilt_cmd
             self.pub_cmds.publish(self.joint_commands)
         else:
+            # Publish to PTU
+            self.joint_commands.cmd[0] = 0
+            self.joint_commands.cmd[1] = 0
+            self.pub_cmds.publish(self.joint_commands)
             rospy.loginfo("No target detected") if DEBUG else None
 
     def run(self):
+        rospy.loginfo("Turret Controller Service is running")
         rospy.Timer(rospy.Duration(1.0 / RATE), self.track_target)
         rospy.spin()
 
