@@ -11,6 +11,7 @@ TURRENT_INFO_SERVICE_NAME = "/pxxls/get_robot_info"
 PTU_COMMAND_TOPIC = "/pxxls/commands/joint_group"
 BASE_FRAME_ID = "/pxxls/base_link"
 TILT_TF_FRAME_ID = "pxxls/tilt_link"
+MAP_FRAME_ID = "/map"
 RATE = 25
 
 DEBUG = True
@@ -69,7 +70,8 @@ class TurretControllerService(object):
         return trans, rot
 
     def track_target(self, event=None):
-        (trans_target, rot_target) = self.lookup_transform(self.target_frame_id)
+        (trans_target, rot_target) = self.lookup_transform(destintation_frame_id=self.target_frame_id, 
+                                                           base_frame_id=MAP_FRAME_ID)
         (trans_ptu, rot_ptu) = self.lookup_transform(TILT_TF_FRAME_ID)
         if self.aim_enable and not self.initialized:
             self.go_home()
@@ -87,6 +89,9 @@ class TurretControllerService(object):
             x_target = trans_target[0]
             y_target = trans_target[1]
             z_target = trans_target[2]
+            rospy.loginfo("X detection: %f", x_target) if DEBUG else None
+            rospy.loginfo("Y detection: %f", y_target) if DEBUG else None
+            rospy.loginfo("Z detection: %f", z_target) if DEBUG else None
 
             _, tilt_theta, pan_theta = tf.transformations.euler_from_quaternion(rot_ptu)
 
