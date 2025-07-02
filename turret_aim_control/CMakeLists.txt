@@ -12,7 +12,10 @@ find_package(rclcpp REQUIRED)
 find_package(turret_aim_control_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(interbotix_xs_driver REQUIRED)
 find_package(interbotix_xs_msgs REQUIRED)
+find_package(interbotix_ros_core REQUIRED)
+find_package(interbotix_ros_turrets REQUIRED)
 
 include_directories(
     include
@@ -23,7 +26,10 @@ set(ROS_DEPS
     turret_aim_control_interfaces
     geometry_msgs
     sensor_msgs
+    interbotix_xs_driver
     interbotix_xs_msgs
+    interbotix_ros_core
+    interbotix_ros_turrets
 )
 
 add_executable(turret_server src/turret_server.cpp)

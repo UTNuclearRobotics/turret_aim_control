@@ -8,21 +8,21 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
     joint_cmd_pub_ = this->create_publisher<interbotix_xs_msgs::msg::JointGroupCommand>(
         "/pxxls/commands/joint_group", 1);
 
-    aim_turret_service_ = this->create_service<tracking_interfaces::srv::AimTurret>(
+    aim_turret_service_ = this->create_service<turret_aim_control_interfaces::srv::AimTurret>(
         "aim_turret", std::bind(&TurretServer::aimTurret, this, std::placeholders::_1, std::placeholders::_2));
 
-    joint_state_sub_ = node_->create_subscription<sensor_msgs::msg::JointState>(
+    joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         "/pxxls/joint_states", 1,
         std::bind(&TurretServer::jointStateCallback, this, std::placeholders::_1));
 
     initLimits();
 }
 
-void TurretServer::aimTurret(const std::shared_ptr<tracking_interfaces::srv::AimTurret::Request> request, std::shared_ptr<tracking_interfaces::srv::AimTurret::Response> response)
+void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Response> response)
 {
     const auto &dir_vector = request->direction_vector;
-    double pan = std::atan2(dir_vector.y, dir_vector.x);
-    double tilt = std::atan2(dir_vector.z, std::sqrt(dir_vector.x * dir_vector.x + dir_vector.y * dir_vector.y));
+    float pan = static_cast<float>(std::atan2(dir_vector.y, dir_vector.x));
+    float tilt = static_cast<float>(std::atan2(dir_vector.z, std::sqrt(dir_vector.x * dir_vector.x + dir_vector.y * dir_vector.y)));
 
     pan = std::clamp(pan, pan_limits_[0], pan_limits_[1]);
     tilt = std::clamp(tilt, tilt_limits_[0], tilt_limits_[1]);
@@ -101,7 +101,7 @@ void TurretServer::initLimits()
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    auto node{std::make_shared<tracking_server::TurretServer>(rclcpp::NodeOptions())};
+    auto node {std::make_shared<turret_aim_control::TurretServer>(rclcpp::NodeOptions())};
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;
