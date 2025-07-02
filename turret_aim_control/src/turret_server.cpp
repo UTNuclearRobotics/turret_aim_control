@@ -15,7 +15,20 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
         "/pxxls/joint_states", 1,
         std::bind(&TurretServer::jointStateCallback, this, std::placeholders::_1));
 
-    initLimits();
+    if (!initLimits()) {
+        RCLCPP_ERROR(get_logger(), "initLimits failed — shutting down node");
+
+        rclcpp::shutdown();
+
+        // exit_timer_ = create_wall_timer(
+        //     std::chrono::milliseconds(100),
+        //     [this]() {
+        //     RCLCPP_INFO(get_logger(), "Node shutting down");
+        //     exit(0);
+        //     });
+
+        return;
+    }
 }
 
 void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Response> response)
@@ -72,12 +85,16 @@ void TurretServer::jointStateCallback(const sensor_msgs::msg::JointState::Shared
     joint_state_cv_.notify_all();
 }
 
-void TurretServer::initLimits() 
+bool TurretServer::initLimits() 
 {
     auto client = this->create_client<interbotix_xs_msgs::srv::RobotInfo>("/pxxls/get_robot_info");
     
     while (!client->wait_for_service(std::chrono::seconds(1))) {
-        RCLCPP_INFO(this->get_logger(), "Waiting for robot info service...");
+        if (!rclcpp::ok()) {
+            RCLCPP_WARN(this->get_logger(), "Interrupted while waiting for /pxxls/get_robot_info. Exiting.");
+            return false;
+        }
+        RCLCPP_INFO(this->get_logger(), "Waiting for robot info service…");
     }
 
     auto request = std::make_shared<interbotix_xs_msgs::srv::RobotInfo::Request>();
@@ -92,8 +109,10 @@ void TurretServer::initLimits()
         tilt_limits_ = {info->joint_lower_limits[1], info->joint_upper_limits[1]};
     } else {
         RCLCPP_ERROR(this->get_logger(), "Failed to get turret joint limits!");
-        // add manual limits?
+        return false;
     }
+
+    return true;
 }
 
 } // namespace turret_aim_control

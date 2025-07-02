@@ -24,7 +24,7 @@ public:
 
 private:
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
-    void initLimits();
+    bool initLimits();
 
     std::shared_ptr<rclcpp::Publisher<interbotix_xs_msgs::msg::JointGroupCommand>> joint_cmd_pub_;
     std::shared_ptr<rclcpp::Service<turret_aim_control_interfaces::srv::AimTurret>> aim_turret_service_;
