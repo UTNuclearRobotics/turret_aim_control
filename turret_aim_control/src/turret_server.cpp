@@ -5,30 +5,30 @@ namespace turret_aim_control {
 TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
 : Node("turret_controller", opts)
 {
-    joint_cmd_pub_ = this->create_publisher<interbotix_xs_msgs::msg::JointGroupCommand>(
-        "/pxxls/commands/joint_group", 1);
-
     aim_turret_service_ = this->create_service<turret_aim_control_interfaces::srv::AimTurret>(
         "aim_turret", std::bind(&TurretServer::aimTurret, this, std::placeholders::_1, std::placeholders::_2));
+
+    joint_cmd_pub_ = this->create_publisher<interbotix_xs_msgs::msg::JointGroupCommand>(
+        "/pxxls/commands/joint_group", 1);
 
     joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         "/pxxls/joint_states", 1,
         std::bind(&TurretServer::jointStateCallback, this, std::placeholders::_1));
 
-    if (!initLimits()) {
-        RCLCPP_ERROR(get_logger(), "initLimits failed — shutting down node");
+     if (!initLimits()) {
+         RCLCPP_ERROR(get_logger(), "initLimits failed — shutting down node");
+         rclcpp::shutdown();
+         return;
+     }
 
-        rclcpp::shutdown();
+    float pan_target, tilt_target;
+    pan_target = actual_pan_;
+    tilt_target = actual_tilt_;
 
-        // exit_timer_ = create_wall_timer(
-        //     std::chrono::milliseconds(100),
-        //     [this]() {
-        //     RCLCPP_INFO(get_logger(), "Node shutting down");
-        //     exit(0);
-        //     });
-
-        return;
-    }
+    interbotix_xs_msgs::msg::JointGroupCommand cmd;
+    cmd.name = "turret";
+    cmd.cmd = {pan_target, tilt_target};
+    joint_cmd_pub_->publish(cmd);
 }
 
 void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Response> response)
@@ -52,8 +52,8 @@ void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces
     float pan_target = current_pan + pan_offset;
     float tilt_target = current_tilt + tilt_offset;
 
-    pan_target = std::clamp(pan_target, pan_limits_[0], pan_limits_[1]);
-    tilt_target = std::clamp(tilt_target, tilt_limits_[0], tilt_limits_[1]);
+    pan_target = wrapToRange(pan_target, pan_limits_[0], pan_limits_[1]);
+    tilt_target = wrapToRange(tilt_target, tilt_limits_[0], tilt_limits_[1]);
 
     RCLCPP_INFO(this->get_logger(), 
                 "Aiming - Current: pan=%.3f, tilt=%.3f | Offset: pan=%.3f, tilt=%.3f | Target: pan=%.3f, tilt=%.3f",
@@ -103,6 +103,16 @@ void TurretServer::jointStateCallback(const sensor_msgs::msg::JointState::Shared
     joint_state_cv_.notify_all();
 }
 
+float TurretServer::wrapToRange(float val, float min, float max) 
+{
+    float range = max - min;
+
+    while (val < min) val += range;
+    while (val >= max) val -= range;
+
+    return val;
+}
+
 bool TurretServer::initLimits() 
 {
     auto client = this->create_client<interbotix_xs_msgs::srv::RobotInfo>("/pxxls/get_robot_info");
@@ -125,6 +135,8 @@ bool TurretServer::initLimits()
         auto info = result.get();
         pan_limits_ = {info->joint_lower_limits[0], info->joint_upper_limits[0]};
         tilt_limits_ = {info->joint_lower_limits[1], info->joint_upper_limits[1]};
+        RCLCPP_INFO(this->get_logger(), "Pan limits: [%.3f, %.3f]", pan_limits_[0], pan_limits_[1]);
+        RCLCPP_INFO(this->get_logger(), "Tilt limits: [%.3f, %.3f]", tilt_limits_[0], tilt_limits_[1]);
     } else {
         RCLCPP_ERROR(this->get_logger(), "Failed to get turret joint limits!");
         return false;
