@@ -1,3 +1,5 @@
 geometry_msgs/Vector3 direction_vector
+int32 motion_timeout
+float32 pos_threshold
 ---
 bool success false

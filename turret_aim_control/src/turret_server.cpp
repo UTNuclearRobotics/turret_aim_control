@@ -6,7 +6,6 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
 : Node("turret_controller", opts)
 {
     service_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-    timer_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
     aim_turret_service_ = this->create_service<turret_aim_control_interfaces::srv::AimTurret>(
         "aim_turret", std::bind(&TurretServer::aimTurret, this, std::placeholders::_1, std::placeholders::_2),
@@ -22,25 +21,27 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
     joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         "/pxxls/joint_states", 10,
         std::bind(&TurretServer::jointStateCallback, this, std::placeholders::_1));
-
-    pan_target_ = 0;
-    tilt_target_ = 0;
     
-    getRobotInfo();
+    if (!initLimits()) {
+        RCLCPP_ERROR(get_logger(), "initLimits failed — shutting down node");
+        rclcpp::shutdown();
+    }
 
-    command_publisher_timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(500), 
-        std::bind(&TurretServer::publishJointGroupCommand, this),
-        timer_cb_group_);
+    { // Scoped lock for actual_pan/tilt
+        std::lock_guard<std::mutex> lock(joint_state_mutex_);
+        
+        RCLCPP_INFO(this->get_logger(), 
+                "Initializing PTU to home: pan: %.3f, tilt: %.3f",
+                actual_pan_, actual_tilt_);
+        
+        interbotix_xs_msgs::msg::JointGroupCommand cmd;
+        cmd.name = "turret";
+        cmd.cmd = {actual_pan_, actual_tilt_};
+        joint_cmd_pub_->publish(cmd);
+    }
 
-    RCLCPP_INFO(get_logger(), "TurretServer node successfully initialized. Waiting for joint limits...");
 
-    // interbotix_xs_msgs::msg::JointGroupCommand cmd;
-    // cmd.name = "turret";
-    // cmd.cmd = {pan_target, tilt_target};
-
-    // // raise(SIGTRAP);
-    // joint_cmd_pub_->publish(cmd);
+    RCLCPP_INFO(get_logger(), "TurretServer node successfully initialized.");
 }
 
 void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Request> request, std::shared_ptr<turret_aim_control_interfaces::srv::AimTurret::Response> response)
@@ -65,7 +66,7 @@ void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces
 
     const auto &dir_vector = request->direction_vector;
     float pan_offset = static_cast<float>(std::atan2(dir_vector.y, dir_vector.x));
-    float tilt_offset = static_cast<float>(std::atan2(dir_vector.z, std::sqrt(dir_vector.x * dir_vector.x + dir_vector.y * dir_vector.y)));
+    float tilt_offset = static_cast<float>(std::atan2(-dir_vector.z, std::sqrt(dir_vector.x * dir_vector.x + dir_vector.y * dir_vector.y)));
 
     float pan_target = current_pan + pan_offset;
     float tilt_target = current_tilt + tilt_offset;
@@ -73,25 +74,20 @@ void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces
     pan_target = wrapToRange(pan_target, pan_limits_[0], pan_limits_[1]);
     tilt_target = wrapToRange(tilt_target, tilt_limits_[0], tilt_limits_[1]);
 
-    RCLCPP_INFO(this->get_logger(), 
-                "Aiming - Current: pan=%.3f, tilt=%.3f | Offset: pan=%.3f, tilt=%.3f | Target: pan=%.3f, tilt=%.3f",
-                current_pan, current_tilt, pan_offset, tilt_offset, pan_target, tilt_target);
+    RCLCPP_INFO(this->get_logger(),
+            "Publishing command - P:%+.3f T:%+.3f | Current - P:%+.3f T:%+.3f | Error - P:%+.3f T:%+.3f",
+            pan_target, tilt_target,
+            current_pan, current_tilt,
+            pan_offset, tilt_offset);
 
-    { // Scoped lock for pan/tilt_target
-        std::lock_guard<std::mutex> lock(target_mutex_);
-        pan_target_ = pan_target;
-        tilt_target_ = tilt_target;
-    }    
+    interbotix_xs_msgs::msg::JointGroupCommand cmd;
+    cmd.name = "turret";
+    cmd.cmd = {pan_target, tilt_target};
 
-    // interbotix_xs_msgs::msg::JointGroupCommand cmd;
-    // cmd.name = "turret";
-    // cmd.cmd = {pan_target, tilt_target};
+    joint_cmd_pub_->publish(cmd);
 
-    // // raise(SIGTRAP);
-    // joint_cmd_pub_->publish(cmd);
-
-    const double POSITION_THRESHOLD = 0.1; 
-    const int TIMEOUT_MS = 10000;
+    const int TIMEOUT_MS = request->motion_timeout;
+    const double POSITION_THRESHOLD = request->pos_threshold;
     auto start = std::chrono::steady_clock::now();
 
     std::unique_lock<std::mutex> lock(joint_state_mutex_);
@@ -101,8 +97,8 @@ void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces
             continue;
         }
 
-        double pan_error = std::abs(actual_pan_ - pan_target_);
-        double tilt_error = std::abs(actual_tilt_ - tilt_target_);
+        double pan_error = std::abs(actual_pan_ - pan_target);
+        double tilt_error = std::abs(actual_tilt_ - tilt_target);
 
         if (pan_error < POSITION_THRESHOLD && tilt_error < POSITION_THRESHOLD) {
             response->success = true;
@@ -132,33 +128,6 @@ void TurretServer::jointStateCallback(const sensor_msgs::msg::JointState::Shared
     joint_state_cv_.notify_all();
 }
 
-void TurretServer::publishJointGroupCommand()
-{
-    if (!limits_initialized_) {
-        getRobotInfo();
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, // Log at most once every 5 seconds
-                    "Joint limits not yet initialized. Skipping joint command publication.");
-        return;
-    }
-
-    float pan_to_publish, tilt_to_publish;
-    { // Scoped lock for pan/tilt_target
-        std::lock_guard<std::mutex> lock(target_mutex_);
-        pan_to_publish = pan_target_;
-        tilt_to_publish = tilt_target_;
-    }
-
-    interbotix_xs_msgs::msg::JointGroupCommand cmd;
-    cmd.name = "turret";
-    cmd.cmd = {pan_to_publish, tilt_to_publish};
-    
-    joint_cmd_pub_->publish(cmd);
-
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                "Periodically publishing command: pan=%.3f, tilt=%.3f",
-                pan_to_publish, tilt_to_publish);
-}
-
 float TurretServer::wrapToRange(float val, float min, float max) 
 {
     float range = max - min;
@@ -169,27 +138,23 @@ float TurretServer::wrapToRange(float val, float min, float max)
     return val;
 }
 
-void TurretServer::getRobotInfo() 
+bool TurretServer::initLimits() 
 {    
-    if (!info_client_->service_is_ready()) {
-        RCLCPP_WARN(this->get_logger(), "Robot info service /pxxls/get_robot_info not ready. Will retry automatically.");
-        return;
+    while (!info_client_->wait_for_service(std::chrono::seconds(1))) {
+        if (!rclcpp::ok()) {
+            RCLCPP_WARN(this->get_logger(), "Interrupted while waiting for /pxxls/get_robot_info. Exiting.");
+            return false;
+        }
+        RCLCPP_INFO(this->get_logger(), "Waiting for joint limits through robot info service...");
     }
 
     auto request = std::make_shared<interbotix_xs_msgs::srv::RobotInfo::Request>();
     request->cmd_type = "group";
     request->name = "turret";
 
-    info_client_->async_send_request(request, std::bind(&TurretServer::initLimits, this, std::placeholders::_1));
-
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                "Sent request to get turret joint limits asynchronously.");
-}
-
-void TurretServer::initLimits(rclcpp::Client<interbotix_xs_msgs::srv::RobotInfo>::SharedFuture future)
-{
-    auto info = future.get();
-    if (info) {
+    auto result = info_client_->async_send_request(request);
+    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), result) == rclcpp::FutureReturnCode::SUCCESS) {
+        auto info = result.get();
         pan_limits_ = {info->joint_lower_limits[0], info->joint_upper_limits[0]};
         tilt_limits_ = {info->joint_lower_limits[1], info->joint_upper_limits[1]};
         limits_initialized_ = true;
@@ -198,7 +163,9 @@ void TurretServer::initLimits(rclcpp::Client<interbotix_xs_msgs::srv::RobotInfo>
         RCLCPP_INFO(this->get_logger(), "Joint limits successfully initialized.");
     } else {
         RCLCPP_ERROR(this->get_logger(), "Failed to get turret joint limits from service response!");
+        return false;
     }
+    return true;
 }
 
 } // namespace turret_aim_control

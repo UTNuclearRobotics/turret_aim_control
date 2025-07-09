@@ -12,6 +12,8 @@ BT::PortsList AimTurret::providedPorts()
         BT::InputPort<std::string>("namespace", "Namespace of called service. Leave empty to use namespace of this node."),
         BT::InputPort<int>("service_discovery_timeout", 1000, "Duration in ms waited for service to be available."),
         BT::InputPort<std::shared_ptr<geometry_msgs::msg::Vector3>>("direction_vector", "Vector to align with."),
+        BT::InputPort<int>("motion_timeout", 2000, "Duration in ms waited for PTU motion to complete."),
+        BT::InputPort<float>("pos_threshold", 0.1, "Max radian error for motion completion."),
     };
 }
 
@@ -38,8 +40,12 @@ BT::NodeStatus AimTurret::onStart()
 
     auto req {std::make_shared<Trigger::Request>()};
     auto direction_vector {getInput<std::shared_ptr<geometry_msgs::msg::Vector3>>("direction_vector").value()};
+    auto motion_timeout {getInput<int>("motion_timeout").value()};
+    auto pos_threshold {getInput<float>("pos_threshold").value()};
 
     req->direction_vector = *direction_vector;
+    req->motion_timeout = motion_timeout;
+    req->pos_threshold = pos_threshold;
     
     request_future_ = service_client_->async_send_request(req);
     RCLCPP_INFO_STREAM(node_->get_logger(), "Aim Turret " << result << "...");

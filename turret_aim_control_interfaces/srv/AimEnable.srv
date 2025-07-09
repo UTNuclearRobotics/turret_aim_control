@@ -1,5 +1,0 @@
-bool aim_enable
-string target_frame_id
----
-bool success
-string message
