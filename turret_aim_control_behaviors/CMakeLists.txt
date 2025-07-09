@@ -34,6 +34,7 @@ endif()
 add_library(turret_aim_control_behaviors ${LIBRARY_TYPE}
     src/aim_turret.cpp
     src/plugin.cpp
+    src/set_vector.cpp
 )
 target_compile_definitions(turret_aim_control_behaviors PRIVATE BUILD_${LIBRARY_TYPE}_LIBRARY)
 ament_target_dependencies(turret_aim_control_behaviors ${BEHAVIOR_TREE_DEPS})
