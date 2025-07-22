@@ -14,6 +14,7 @@ BT::PortsList AimTurret::providedPorts()
         BT::InputPort<std::shared_ptr<geometry_msgs::msg::Vector3>>("direction_vector", "Vector to align with."),
         BT::InputPort<int>("motion_timeout", 2000, "Duration in ms waited for PTU motion to complete."),
         BT::InputPort<float>("pos_threshold", 0.1, "Max radian error for motion completion."),
+        BT::InputPort<bool>("move_relative", true, "Whether commands are relative or absolute to current PTU orientation."),
     };
 }
 
@@ -42,11 +43,13 @@ BT::NodeStatus AimTurret::onStart()
     auto direction_vector {getInput<std::shared_ptr<geometry_msgs::msg::Vector3>>("direction_vector").value()};
     auto motion_timeout {getInput<int>("motion_timeout").value()};
     auto pos_threshold {getInput<float>("pos_threshold").value()};
+    auto move_relative {getInput<bool>("move_relative").value()};
 
     req->direction_vector = *direction_vector;
     req->motion_timeout = motion_timeout;
     req->pos_threshold = pos_threshold;
-    
+    req->move_relative = move_relative;
+
     request_future_ = service_client_->async_send_request(req);
     RCLCPP_INFO_STREAM(node_->get_logger(), "Aim Turret " << result << "...");
 

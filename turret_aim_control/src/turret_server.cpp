@@ -68,8 +68,13 @@ void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces
     float pan_offset = static_cast<float>(std::atan2(dir_vector.y, dir_vector.x));
     float tilt_offset = static_cast<float>(std::atan2(-dir_vector.z, std::sqrt(dir_vector.x * dir_vector.x + dir_vector.y * dir_vector.y)));
 
-    float pan_target = current_pan + pan_offset;
-    float tilt_target = current_tilt + tilt_offset;
+    float pan_target = pan_offset;
+    float tilt_target = tilt_offset;
+
+    if (request->move_relative) {
+        pan_target += current_pan;
+        tilt_target += current_tilt;
+    }
 
     pan_target = wrapToRange(pan_target, pan_limits_[0], pan_limits_[1]);
     tilt_target = wrapToRange(tilt_target, tilt_limits_[0], tilt_limits_[1]);
