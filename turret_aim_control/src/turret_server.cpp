@@ -12,7 +12,6 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
         rmw_qos_profile_services_default,
         service_cb_group_);
 
-    
     info_client_ = this->create_client<interbotix_xs_msgs::srv::RobotInfo>("/pxxls/get_robot_info");
 
     joint_cmd_pub_ = this->create_publisher<interbotix_xs_msgs::msg::JointGroupCommand>(
@@ -22,7 +21,28 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
         "/pxxls/joint_states", 10,
         std::bind(&TurretServer::jointStateCallback, this, std::placeholders::_1));
     
-    if (!initLimits()) {
+    this->declare_parameter<float>("min_pan_angle", std::numeric_limits<float>::quiet_NaN());
+    this->declare_parameter<float>("max_pan_angle", std::numeric_limits<float>::quiet_NaN());
+    this->declare_parameter<float>("min_tilt_angle", std::numeric_limits<float>::quiet_NaN());
+    this->declare_parameter<float>("max_tilt_angle", std::numeric_limits<float>::quiet_NaN());
+
+    auto get_angle_param = [](rclcpp::Node &node, const std::string &name) -> std::optional<float> {
+        float value;
+        if (node.get_parameter(name, value) && !std::isnan(value)) {
+            return value;
+        } else {
+            return std::nullopt;
+        }
+    };
+
+    AngleLimits angle_limits {
+        .min_pan = get_angle_param(*this, "min_pan_angle"),
+        .max_pan = get_angle_param(*this, "max_pan_angle"),
+        .min_tilt = get_angle_param(*this, "min_tilt_angle"),
+        .max_tilt = get_angle_param(*this, "max_tilt_angle")
+    };
+
+    if (!initLimits(angle_limits)) {
         RCLCPP_ERROR(get_logger(), "initLimits failed — shutting down node");
         rclcpp::shutdown();
     }
@@ -39,7 +59,6 @@ TurretServer::TurretServer(const rclcpp::NodeOptions &opts)
         cmd.cmd = {actual_pan_, actual_tilt_};
         joint_cmd_pub_->publish(cmd);
     }
-
 
     RCLCPP_INFO(get_logger(), "TurretServer node successfully initialized.");
 }
@@ -76,8 +95,18 @@ void TurretServer::aimTurret(const std::shared_ptr<turret_aim_control_interfaces
         tilt_target += current_tilt;
     }
 
-    pan_target = wrapToRange(pan_target, pan_limits_[0], pan_limits_[1]);
-    tilt_target = wrapToRange(tilt_target, tilt_limits_[0], tilt_limits_[1]);
+    pan_target = wrapToRange(pan_target, -M_PI, M_PI);
+    tilt_target = wrapToRange(tilt_target, -M_PI, M_PI);
+
+    if (pan_target < pan_limits_[0] || pan_target > pan_limits_[1] || tilt_target < tilt_limits_[0] || tilt_target > tilt_limits_[1]) {
+        RCLCPP_WARN(this->get_logger(), "Target angles [P: %.3f, T: %.3f] out of bounds! Pan: [%.3f, %.3f], Tilt: [%.3f, %.3f]",
+                    pan_target, tilt_target, pan_limits_[0], pan_limits_[1], tilt_limits_[0], tilt_limits_[1]);
+        response->success = false;
+        return;
+    }
+
+    pan_target = std::clamp(pan_target, pan_limits_[0], pan_limits_[1]);
+    tilt_target = std::clamp(tilt_target, tilt_limits_[0], tilt_limits_[1]);
 
     RCLCPP_INFO(this->get_logger(),
             "Publishing command - P:%+.3f T:%+.3f | Current - P:%+.3f T:%+.3f | Error - P:%+.3f T:%+.3f",
@@ -143,7 +172,7 @@ float TurretServer::wrapToRange(float val, float min, float max)
     return val;
 }
 
-bool TurretServer::initLimits() 
+bool TurretServer::initLimits(const AngleLimits &angle_limits)
 {    
     while (!info_client_->wait_for_service(std::chrono::seconds(1))) {
         if (!rclcpp::ok()) {
@@ -160,8 +189,8 @@ bool TurretServer::initLimits()
     auto result = info_client_->async_send_request(request);
     if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), result) == rclcpp::FutureReturnCode::SUCCESS) {
         auto info = result.get();
-        pan_limits_ = {info->joint_lower_limits[0], info->joint_upper_limits[0]};
-        tilt_limits_ = {info->joint_lower_limits[1], info->joint_upper_limits[1]};
+        pan_limits_ = {angle_limits.min_pan.value_or(info->joint_lower_limits[0]), angle_limits.max_pan.value_or(info->joint_upper_limits[0])};
+        tilt_limits_ = {angle_limits.min_tilt.value_or(info->joint_lower_limits[1]), angle_limits.max_tilt.value_or(info->joint_upper_limits[1])};
         limits_initialized_ = true;
         RCLCPP_INFO(this->get_logger(), "Pan limits: [%.3f, %.3f]", pan_limits_[0], pan_limits_[1]);
         RCLCPP_INFO(this->get_logger(), "Tilt limits: [%.3f, %.3f]", tilt_limits_[0], tilt_limits_[1]);

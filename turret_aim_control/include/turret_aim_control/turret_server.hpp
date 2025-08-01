@@ -3,6 +3,9 @@
 #include <memory>
 #include <string>
 #include <csignal>
+#include <cmath>
+#include <algorithm>
+#include <limits>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -16,6 +19,13 @@
 
 namespace turret_aim_control {
 
+struct AngleLimits {
+    std::optional<float> min_pan;
+    std::optional<float> max_pan;
+    std::optional<float> min_tilt;
+    std::optional<float> max_tilt;
+};
+
 class TurretServer : public rclcpp::Node 
 {
 public:
@@ -26,7 +36,7 @@ public:
 private:
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
     float wrapToRange(float val, float min, float max);
-    bool initLimits();
+    bool initLimits(const AngleLimits &angle_limits);
 
     std::shared_ptr<rclcpp::Service<turret_aim_control_interfaces::srv::AimTurret>> aim_turret_service_;
     std::shared_ptr<rclcpp::Client<interbotix_xs_msgs::srv::RobotInfo>> info_client_;
